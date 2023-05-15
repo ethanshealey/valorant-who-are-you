@@ -18,8 +18,14 @@ import fs from 'node:fs'
 import axios from 'axios'
 const https = require('https')
 
-// app.disableHardwareAcceleration()
-let lockfile: any = undefined
+// Lets save some important information 
+// for later API calls :)
+let lockfile: any = undefined;
+let puuid: string | undefined = undefined;
+let session: any = undefined;
+let clientVersion: string | undefined = undefined;
+let region: string | undefined = undefined;
+let shard: string | undefined = undefined;
 
 class AppUpdater {
   constructor() {
@@ -63,6 +69,7 @@ const installExtensions = async () => {
 };
 
 const createWindow = async () => {
+
   if (isDebug) {
     await installExtensions();
   }
@@ -89,35 +96,7 @@ const createWindow = async () => {
     },
   });
 
-  mainWindow.loadURL(resolveHtmlPath('index.html')).then(() => {
-    // wait for file
-    const lockfilePath = `${process.env.LOCALAPPDATA}\\Riot Games\\Riot Client\\Config\\lockfile`
-    let inter = setInterval(() => {
-      if(fs.existsSync(lockfilePath)) {
-        fs.readFile(lockfilePath, 'utf8', (err, data) => {
-          if(err) {
-            console.error(err)
-            return
-          }
-          const lockfileDataArr = data.split(':')
-          const lockfileData = {
-            'name': lockfileDataArr[0],
-            'pid': lockfileDataArr[1],
-            'port': lockfileDataArr[2],
-            'password': lockfileDataArr[3],
-            'protocol': lockfileDataArr[4],
-            '__force__': Math.random()
-          }
-          console.log(lockfileData)
-          lockfile = lockfileData
-
-          mainWindow?.webContents.send('lockfile', lockfileData)
-
-        })
-        clearInterval(inter)
-      }
-    }, 5000)
-  });
+  mainWindow.loadURL(resolveHtmlPath('index.html'))
 
 
 
@@ -158,6 +137,89 @@ const createAxiosRequestWithPassword = () => {
         'Authorization': 'Basic ' + btoa('riot:' + lockfile.password)
     }
   })
+}
+const sleep = (ms: number) => {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms)
+  })
+}
+
+/**
+ * CLIENT VERSION
+ */
+const getClientVersion = async () => {
+  const clientVersionPath = `${process.env.LOCALAPPDATA}\\VALORANT\\Saved\\Logs\\ShooterGame.log`
+  if(fs.existsSync(clientVersionPath)) {
+    let target = fs.readFileSync(clientVersionPath, 'utf8')
+    clientVersion = target.split('\n').find(line => line.includes('CI server version:'))?.split(' ').slice(-1)[0].replaceAll(/(\r\n|\r|\n)/gm, '')
+  }
+}
+
+/**
+ * LOCKFILE
+ */
+const getLockfile = async () => {
+  await getClientVersion()
+  await getRegionAndShard()
+  const lockfilePath = `${process.env.LOCALAPPDATA}\\Riot Games\\Riot Client\\Config\\lockfile`
+    let inter = setInterval(() => {
+      if(fs.existsSync(lockfilePath)) {
+        fs.readFile(lockfilePath, 'utf8', async (err, data) => {
+          if(err) {
+            console.error(err)
+            return
+          }
+          const lockfileDataArr = data.split(':')
+          const lockfileData = {
+            'name': lockfileDataArr[0],
+            'pid': lockfileDataArr[1],
+            'port': lockfileDataArr[2],
+            'password': lockfileDataArr[3],
+            'protocol': lockfileDataArr[4],
+            '__force__': Math.random()
+          }
+          lockfile = lockfileData
+
+          mainWindow?.webContents.send('lockfile', lockfileData)
+          
+          await getSession()
+          await getPlayerMMR()
+  
+        })
+        clearInterval(inter)
+      }
+    }, 1000)
+}
+ipcMain.on('lockfile', async () => {
+  getLockfile()
+})
+
+/**
+ * SESSION
+ */
+const getSession = async () => {
+  const instance = createAxiosRequestWithPassword()
+  const url = `https://127.0.0.1:${lockfile.port}/product-session/v1/external-sessions`
+
+  await instance.get(url).then((res) => {
+      // get key and pull client version from session data
+      const key = Object.keys(res.data).filter(k => k !== 'host_app')[0]
+      session = res.data[key]
+  }).catch(e => console.log)
+
+}
+
+/**
+ * REGION/SHARD
+ */
+const getRegionAndShard = async () => {
+  const regionAndShardPath = `${process.env.LOCALAPPDATA}\\VALORANT\\Saved\\Logs\\ShooterGame.log`
+  if(fs.existsSync(regionAndShardPath)) {
+    let target = fs.readFileSync(regionAndShardPath, 'utf8')//, (err, data) => {
+    target = target?.split('\n')?.find(line => line.includes('https://glz-'))?.split(' ').find(line => line.includes('https://glz-'))
+    region = target?.split('-')[1]
+    shard = target?.split('-')[2].split('.')[1]
+  }
 }
 
 /***
@@ -201,7 +263,6 @@ const getPlayerInfo = async () => {
 }
 ipcMain.on('send-player-info', async () => {
   const res = await getPlayerInfo()
-  console.log(res)
   mainWindow?.webContents.send('get-player-info', res)
 })
 
@@ -219,7 +280,47 @@ const getRSOUserInfo = async () => {
 }
 ipcMain.on('send-rso-user-info', async () => {
   const res = await getRSOUserInfo()
+  puuid = JSON.parse(res.userInfo).sub
   mainWindow?.webContents.send('get-rso-user-info', res)
+})
+
+/**
+ * PLAYER MMR
+ */
+const getPlayerMMR = async () => {
+
+  // get entitlement tokens
+  const entitlement = await getEntitlement()
+
+  while(!clientVersion || !puuid)
+    await sleep(500)
+
+  // Create Axios instance
+  const instance = axios.create({
+    httpsAgent: new https.Agent({
+        rejectUnauthorized: false
+    }),
+    headers: {
+        'Content-Type': 'application/json',
+        'X-Riot-ClientPlatform': 'ew0KCSJwbGF0Zm9ybVR5cGUiOiAiUEMiLA0KCSJwbGF0Zm9ybU9TIjogIldpbmRvd3MiLA0KCSJwbGF0Zm9ybU9TVmVyc2lvbiI6ICIxMC4wLjE5MDQyLjEuMjU2LjY0Yml0IiwNCgkicGxhdGZvcm1DaGlwc2V0IjogIlVua25vd24iDQp9',
+        'X-Riot-ClientVersion': clientVersion,
+        'X-Riot-Entitlements-JWT': entitlement.token,
+        'Authorization': 'Bearer ' + entitlement.accessToken
+    }
+  })
+
+  const url = `https://pd.${shard}.a.pvp.net/mmr/v1/players/${puuid}`
+
+  return instance.get(url).then((res) => {
+    return res.data
+  }).catch(e => {
+    console.log(e)
+  })
+
+}
+ipcMain.on('request-mmr', async (mmr) => {
+  const res = await getPlayerMMR()
+  mainWindow?.webContents.send('get-mmr', res)
 })
 
 /****

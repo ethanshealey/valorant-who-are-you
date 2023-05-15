@@ -27,27 +27,48 @@ const electronHandler = {
 contextBridge.exposeInMainWorld('electron', electronHandler);
 
 contextBridge.exposeInMainWorld('bridge', {
+
+  // lockfile
   getLockfile: (lockfile: any) => {
     ipcRenderer.on('lockfile', lockfile)
   },
-  sendEntitlement: (entitlement: any) => {
+  requestLockfile: (lockfile: any) => {
+    ipcRenderer.send('lockfile', lockfile)
+  },
+
+  // entitlement
+  requestEntitlement: (entitlement: any) => {
     ipcRenderer.send('send-entitlement', entitlement)
   },
   getEntitlement: (entitlement: any) => {
     ipcRenderer.on('get-entitlement', entitlement)
   },
-  sendPlayerInfo: (info: any) => {
+
+  // player info
+  requestPlayerInfo: (info: any) => {
     ipcRenderer.send('send-player-info', info)
   },
   getPlayerInfo: (info: any) => {
     ipcRenderer.on('get-player-info', info)
   },
-  sendRSOUserInfo: (info: any) => {
+
+  // rso info
+  requestRSOUserInfo: (info: any) => {
     ipcRenderer.send('send-rso-user-info', info)
   },
   getRSOUserInfo: (info: any) => {
     ipcRenderer.on('get-rso-user-info', info)
+  },
+
+  // mmr
+  requestPlayerMMR: (mmr: any) => {
+    ipcRenderer.send('request-mmr', mmr)
+  },
+  getPlayerMMR: (mmr: any) => {
+    ipcRenderer.on('get-mmr', mmr)
   }
+
+
 })
 
 export type ElectronHandler = typeof electronHandler;
