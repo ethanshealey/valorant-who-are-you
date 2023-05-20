@@ -1,6 +1,7 @@
 import React from 'react'
 import norank from '../images/ranks/0.png'
-import { getRank } from 'renderer/helpers/ImageHelper'
+import { getRankImage } from 'renderer/helpers/ImageHelper'
+
 const HomePlayerCard = (props) => {
   return (
     <div id="home-player-card">
@@ -12,17 +13,8 @@ const HomePlayerCard = (props) => {
             </div>
         </div>
         <div id="home-player-card-right">
-            {/* {
-              props.stats?.current_data.images.small ?
-                <div id="home-player-card-right-rank">
-                  <img src={props.stats?.current_data.images.small} />
-                  <meter id="mmr" value={props.stats?.current_data.ranking_in_tier}min="0" max="100" />
-                </div>
-                :
-                <img src={norank} width="75px" />
-            } */}
             <div id="home-player-card-right-rank">
-                <img width="70px" src={ getRank(props.rank) } />
+                <img width="70px" src={ getRankImage(props.rank) } />
             </div>
         </div>
     </div>

@@ -4,6 +4,7 @@ import './App.css';
 import { useState, useEffect } from 'react'
 import Spinner from './components/Spinner';
 import HomePlayerCard from './components/HomePlayerCard';
+import LiveMatch from './components/LiveMatch';
 
 function Main() {
 
@@ -13,15 +14,22 @@ function Main() {
   const [ card, setCard ] = useState('')
   const [ level, setLevel ] = useState(0)
   const [ rank, setRank ] = useState(0)
+  const [ currentMatch, setCurrentMatch ] = useState({ error: 'No Live Game' })
+  const [ hasRan, setHasRan ] = useState(false)
 
   // Get Lockfile even when screen is
   useEffect(() => {
-    window.bridge.requestLockfile()
+    if(!hasRan) {
+      window.bridge.requestLockfile()
+      setHasRan(true)
+    }
+    
   }, [])
   
   useEffect(() => {
     window.bridge.requestRSOUserInfo()
     window.bridge.requestPlayerMMR()
+    window.bridge.requestCurrentMatchDetails()
   }, [lockfile])
 
   useEffect(() => {
@@ -29,6 +37,14 @@ function Main() {
       getBasicProfile()
     }
   }, [user])
+
+  // attempt to load match every 30 seconds
+  useEffect(() => {
+    setInterval(() => {
+      if(currentMatch?.error)
+        window.bridge.requestCurrentMatchDetails()
+    }, 60_000)
+  }, [])
 
   useEffect(() => { console.log(rank) }, [rank])
 
@@ -43,6 +59,11 @@ function Main() {
   window.bridge.getPlayerMMR((event, mmr) => {
     setPlayerMMR(mmr)
     setRank(Object.keys(mmr?.QueueSkills.competitive.SeasonalInfoBySeasonID).includes(mmr.LatestCompetitiveUpdate.SeasonID) ? mmr.QueueSkills.competitive.SeasonalInfoBySeasonID[mmr?.QueueSkills.competitive.SeasonalInfoBySeasonID].Rank : 0)
+  })
+
+  window.bridge.getCurrentMatchDetails((event, match) => {
+    console.log(match)
+    setCurrentMatch(match)
   })
 
   const getBasicProfile = () => {
@@ -64,7 +85,13 @@ function Main() {
     </div>
   ) : (
     <div id="main-wrapper">
-      <HomePlayerCard user={user} mmr={playerMMR} card={card} level={level} rank={rank} />
+      {
+        currentMatch?.error === 'No Live Game' ? (
+          <HomePlayerCard user={user} mmr={playerMMR} card={card} level={level} rank={rank} />
+        ) : (
+          <LiveMatch match={currentMatch} />
+        )
+      }      
     </div>
   )
 }

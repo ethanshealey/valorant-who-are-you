@@ -122,6 +122,69 @@ body {
   font-size: 10px;
 }
 
+/* stats */
+#match-wrapper {
+  height: auto;
+  height: calc(100vh - 80px);
+  display: flex;
+  flex-direction: row;
+  justify-content: center;
+  align-items: center;
+}
+#red-team {
+  border-right: 5px solid #2a2e32;
+}
+#red-team, #blue-team {
+  width: 45%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  height: auto;
+}
+.stats-player-card {
+  background-color: #2a2e32 !important;
+  width: 90%;
+  padding: 10px;
+  border-radius: 5px;
+  display: flex;
+  flex-direction: row;
+  flex: 0 1 auto;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 15px;
+}
+.stats-player-card h2 {
+  color: #ebebeb;
+  margin-left: 15px;
+  padding: 0;
+}
+.stats-player-card h2 span {
+  opacity: 50%;
+  font-weight: 100;
+}
+.stats-player-card-left {
+  display: flex;
+  flex-direction: row;
+  align-content: space-between;
+  width: 100%;
+  align-items: center;
+  width: auto;
+}
+.stats-player-card-right {
+  display: flex;
+  flex-direction: row;
+  width: auto;
+  margin-right: 5px;
+}
+.stats-player-card .stats-player-card-right-rank #mmr {
+  transform: rotate(-90deg);
+  margin-left: -20px;
+  margin-right: -25px;
+  width: 65px;
+}
+
+
 
 
 

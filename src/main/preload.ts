@@ -66,8 +66,31 @@ contextBridge.exposeInMainWorld('bridge', {
   },
   getPlayerMMR: (mmr: any) => {
     ipcRenderer.on('get-mmr', mmr)
-  }
+  },
 
+  // match history
+  requestMatchHistory: () => {
+    ipcRenderer.send('request-match-history', null)
+  },
+  getMatchHistory: (hist: any) => {
+    ipcRenderer.on('get-match-history', hist)
+  },
+
+  // match details
+  requestMatchDetails: () => {
+    ipcRenderer.send('request-match-details', null)
+  },
+  getMatchDetails: (match: any) => {
+    ipcRenderer.on('get-match-details', match)
+  },
+
+  // current match details
+  requestCurrentMatchDetails: () => {
+    ipcRenderer.send('request-current-match-details', null)
+  },
+  getCurrentMatchDetails: (match: any) => {
+    ipcRenderer.on('get-current-match-details', match)
+  }
 
 })
 

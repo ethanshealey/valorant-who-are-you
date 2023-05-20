@@ -87,6 +87,7 @@ const createWindow = async () => {
     width: 1024,
     height: 728,
     icon: getAssetPath('icon.png'),
+    autoHideMenuBar: true,
     webPreferences: {
       preload: app.isPackaged
         ? path.join(__dirname, 'preload.js')
@@ -138,11 +139,14 @@ const createAxiosRequestWithPassword = () => {
     }
   })
 }
+
 const sleep = (ms: number) => {
   return new Promise((resolve) => {
     setTimeout(resolve, ms)
   })
 }
+
+
 
 /**
  * CLIENT VERSION
@@ -215,8 +219,8 @@ const getSession = async () => {
 const getRegionAndShard = async () => {
   const regionAndShardPath = `${process.env.LOCALAPPDATA}\\VALORANT\\Saved\\Logs\\ShooterGame.log`
   if(fs.existsSync(regionAndShardPath)) {
-    let target = fs.readFileSync(regionAndShardPath, 'utf8')//, (err, data) => {
-    target = target?.split('\n')?.find(line => line.includes('https://glz-'))?.split(' ').find(line => line.includes('https://glz-'))
+    let target: any = fs.readFileSync(regionAndShardPath, 'utf8')//, (err, data) => {
+    target = target?.split('\n')?.find((line: any) => line.includes('https://glz-'))?.split(' ').find((line: any) => line.includes('https://glz-'))
     region = target?.split('-')[1]
     shard = target?.split('-')[2].split('.')[1]
   }
@@ -287,13 +291,15 @@ ipcMain.on('send-rso-user-info', async () => {
 /**
  * PLAYER MMR
  */
-const getPlayerMMR = async () => {
+const getPlayerMMR = async (id: string = '') => {
 
   // get entitlement tokens
   const entitlement = await getEntitlement()
 
   while(!clientVersion || !puuid)
     await sleep(500)
+
+  if(id === '') id = puuid
 
   // Create Axios instance
   const instance = axios.create({
@@ -309,7 +315,7 @@ const getPlayerMMR = async () => {
     }
   })
 
-  const url = `https://pd.${shard}.a.pvp.net/mmr/v1/players/${puuid}`
+  const url = `https://pd.${shard}.a.pvp.net/mmr/v1/players/${id}`
 
   return instance.get(url).then((res) => {
     return res.data
@@ -319,10 +325,190 @@ const getPlayerMMR = async () => {
 
 }
 ipcMain.on('request-mmr', async (mmr) => {
-  const res = await getPlayerMMR()
+  const res = await getPlayerMMR(puuid)
   mainWindow?.webContents.send('get-mmr', res)
 })
 
+/**
+ * MATCH HISTORY
+ */
+const getMatchHistory = async () => {
+  // get entitlement tokens
+  const entitlement = await getEntitlement()
+
+  while(!entitlement || !puuid || !shard)
+    await sleep(500)
+
+  // Create Axios instance
+  const instance = axios.create({
+    httpsAgent: new https.Agent({
+        rejectUnauthorized: false
+    }),
+    headers: {
+        'Content-Type': 'application/json',
+        'X-Riot-Entitlements-JWT': entitlement.token,
+        'Authorization': 'Bearer ' + entitlement.accessToken
+    }
+  })
+
+  const url = `https://pd.${shard}.a.pvp.net/match-history/v1/history/${puuid}`
+
+  return instance.get(url).then((res) => {
+    return res.data
+  })
+
+}
+ipcMain.on('request-match-history', async () => {
+  const hist = await getMatchHistory()
+  mainWindow?.webContents.send('get-match-history', hist)
+})
+
+/**
+ * MATCH DETAILS
+ */
+const getMatchDetails = async () => {
+
+  const entitlement = await getEntitlement()
+  
+  const match = await getMatchHistory()
+
+  const newest_match = match.History?.reduce((prev: any, curr: any) => prev.GameStartTime > curr.GameStartTime ? prev : curr)
+
+  while(!entitlement || !match || !shard)
+    await sleep(500)
+
+  // Create Axios instance
+  const instance = axios.create({
+    httpsAgent: new https.Agent({
+        rejectUnauthorized: false
+    }),
+    headers: {
+        'Content-Type': 'application/json',
+        'X-Riot-Entitlements-JWT': entitlement.token,
+        'Authorization': 'Bearer ' + entitlement.accessToken
+    }
+  })
+
+  const url = `https://pd.${shard}.a.pvp.net/match-details/v1/matches/${newest_match.MatchID}`
+
+  return instance.get(url).then((res) => {
+
+    console.log(res.data)
+    if(res.data.matchInfo.isCompleted) return { error: 'No Live Game' }
+
+    return res.data
+  })
+
+}
+ipcMain.on('request-match-details', async () => {
+  const match = await getMatchDetails()
+  mainWindow?.webContents.send('get-match-details', match)
+})
+
+/**
+ * CURRENT PLAYER
+ */
+const getCurrentPlayer = async () => {
+
+  const entitlement = await getEntitlement()
+
+  while(!entitlement || !region || !shard)
+    await sleep(500)
+
+  const instance = axios.create({
+    httpsAgent: new https.Agent({
+        rejectUnauthorized: false
+    }),
+    headers: {
+        'Content-Type': 'application/json',
+        'X-Riot-Entitlements-JWT': entitlement.token,
+        'Authorization': 'Bearer ' + entitlement.accessToken
+    }
+  })
+  
+  const url = `https://glz-${region}-1.${shard}.a.pvp.net/core-game/v1/players/${puuid}`
+
+  return instance.get(url).then((res) => {
+    return res.data
+  })
+  .catch(e => {
+    return { error: "No Live Game" }
+  })
+}
+
+/**
+ * CURRENT MATCH DETAILS
+ */
+const getCurrentMatchDetails = async () => {
+
+  const entitlement = await getEntitlement()
+
+  while(!entitlement || !region || !shard)
+    await sleep(500)
+
+  const cp = await getCurrentPlayer()
+
+  if(cp?.error === 'No Live Game') return { error: 'No Live Game' }
+
+  const instance = axios.create({
+    httpsAgent: new https.Agent({
+        rejectUnauthorized: false
+    }),
+    headers: {
+        'Content-Type': 'application/json',
+        'X-Riot-Entitlements-JWT': entitlement.token,
+        'Authorization': 'Bearer ' + entitlement.accessToken
+    }
+  })
+
+  const url = `https://glz-${region}-1.${shard}.a.pvp.net/core-game/v1/matches/${cp.MatchID}`
+
+  return instance.get(url).then(async (res) => {
+
+    /**
+     * Parse Data
+     */
+    const players: Object = {'Red': [], 'Blue': []}
+
+    for(const player of res.data.Players) {
+      const playerObject = await getPlayerMMR(player.PlayerIdentity.Subject)
+      let otherData: any = await fetch(`https://api.henrikdev.xyz/valorant/v1/by-puuid/mmr/${region}/${player.PlayerIdentity.Subject}`)
+      otherData = await otherData.json()
+      playerObject['name'] = otherData?.data?.name
+      playerObject['tag'] = otherData?.data?.tag
+
+      let rank = 0;
+
+      if(playerObject?.QueueSkills?.competitive?.SeasonalInfoBySeasonID)
+        if(Object.keys(playerObject?.QueueSkills?.competitive?.SeasonalInfoBySeasonID).includes(playerObject.LatestCompetitiveUpdate.SeasonID)) 
+          rank = playerObject.QueueSkills.competitive.SeasonalInfoBySeasonID[playerObject.LatestCompetitiveUpdate.SeasonID].Rank
+      
+      console.log(otherData?.data?.name, playerObject.LatestCompetitiveUpdate.SeasonID, Object.keys(playerObject.QueueSkills.competitive.SeasonalInfoBySeasonID))
+
+      // players.push(playerObject)
+      players[player.TeamID].push({
+        'name': otherData?.data?.name,
+        'tag': otherData?.data?.tag,
+        'rank': rank,
+        'puuid': player.PlayerIdentity.Subject,
+        'level': player.PlayerIdentity.AccountLevel,
+        'character': player.CharacterID
+      })
+    }
+
+    // console.log(players)
+    return players
+    
+  }).catch(e => {
+    console.log(e)
+    return { error: "No Live Game" }
+  })
+
+}
+ipcMain.on('request-current-match-details', async () => {
+  const match = await getCurrentMatchDetails()
+  mainWindow?.webContents.send('get-current-match-details', match)
+})
 /****
  * 
  * =================================================================================================
